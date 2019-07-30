@@ -501,3 +501,10 @@ def minePOSPats(cPOS):
     SPFinal = SP[0] + SP[1] + SP[2] + SP[3] + SP[4] + SP[5] + SP[6]
 
     return SPFinal
+
+
+def getsingle(features, n):
+    single = []
+    for item in features:
+        single.append(item[n])
+    return single
