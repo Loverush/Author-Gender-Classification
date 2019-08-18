@@ -1,9 +1,11 @@
-import os
 import nltk
-import re
 import numpy as np
-import pandas as pd
+import re
 from collections import Counter
+from nltk.stem.porter import PorterStemmer
+from itertools import groupby
+from nltk.tag.stanford import StanfordPOSTagger
+
 
 def gettext(filename):
     handle = open(filename, 'r', encoding='UTF-8')
@@ -71,7 +73,7 @@ def Gender_Preferential_Features(words_l):
         for j, word in enumerate(words_l):
             flag[j] = word.endswith(trigger)
         GPF_feature[i] = sum(flag)
-    GPF_feature[-1] = words.count('sorry') + words.count('sry')
+    GPF_feature[-1] = words_l.count('sorry') + words_l.count('sry')
     if sum(GPF_feature) != 0:
         GPF_feature = np.array(GPF_feature) / sum(GPF_feature)
     return GPF_feature
@@ -234,18 +236,19 @@ def Word_Classes_Feature(words_l):
     return WC_feature
 
 
-def CorpusPOS(sentences):
+def CorpusPOS(sentences, name):
     posTagList = [
         'NN', 'CC', 'LS', 'PDT', 'POS', 'SYM', 'NNS', 'NNP', 'NNPS', 'FW',
         'CD', 'JJ', 'JJR', 'JJS', 'IN', 'TO', 'DT', 'EX', 'PRP', 'PRP$', 'WDT',
         'WP', 'WP$', 'MD', 'VB', 'VBZ', 'VBP', 'VBD', 'VBN', 'VBG', 'RB',
         'RBR', 'RBS', 'RP', 'WRB', 'UH', '.'
     ]
-    outfile = open('CorpusPOS.txt', 'a')
+    outfile = open(name, 'w')
     for sentence in sentences:
         tagSentence = ""
         tokensWord = nltk.word_tokenize(sentence)
-        textToken = nltk.Text(tokensWord)
+        #textToken = nltk.Text(tokensWord)
+        #tags = st.tag(textToken)
         tags = nltk.pos_tag(tokensWord)
 
         for a, b in tags:
@@ -367,9 +370,9 @@ def calc_probabilities(cPOS):
 
 
 def q1_output(unigrams, bigrams, trigrams, fourgrams, fivegrams, sixgrams,
-              sevengrams):
-    #output probabilities
-    outfile = open('probabilities.txt', 'a')
+              sevengrams, name):
+
+    outfile = open(name, 'r')
     for unigram in unigrams:
         outfile.write(unigram[0] + ':' + str(unigrams[unigram]) + '\n')
     for bigram in bigrams:
@@ -403,15 +406,15 @@ def q1_output(unigrams, bigrams, trigrams, fourgrams, fivegrams, sixgrams,
     outfile.close()
 
 
-def prob(sequence):
+def prob(sequence, Prob):
     if sequence in Prob.keys():
         return Prob[sequence]
     else:
         return 0
 
 
-def fairSCP(sequence):
-    numerator = prob(sequence) * prob(sequence)
+def fairSCP(sequence, Prob):
+    numerator = prob(sequence, Prob) * prob(sequence, Prob)
     sequence = sequence.split()
 
     denominator = 0
@@ -431,7 +434,7 @@ def fairSCP(sequence):
         seq2 = seq2[:-1]
         seq1 = seq1[:-1]
 
-        denominator += prob(seq1) * prob(seq2)
+        denominator += prob(seq1, Prob) * prob(seq2, Prob)
 
     denominator = denominator * 1.0 / (len(sequence) - 1)
 
@@ -444,6 +447,12 @@ def fairSCP(sequence):
 
 
 def candidateGen(Fk):
+    tagList = [
+        'NN', 'CC', 'LS', 'PDT', 'POS', 'SYM', 'NNS', 'NNP', 'NNPS', 'FW', 'CD',
+        'JJ', 'JJR', 'JJS', 'IN', 'TO', 'DT', 'EX', 'PRP', 'PRP$', 'WDT', 'WP',
+        'WP$', 'MD', 'VB', 'VBZ', 'VBP', 'VBD', 'VBN', 'VBG', 'RB', 'RBR', 'RBS',
+        'RP', 'WRB', 'UH', '.'
+    ]
     Ck = []
 
     for item in Fk:
@@ -454,7 +463,13 @@ def candidateGen(Fk):
     return Ck
 
 
-def minePOSPats(cPOS):
+def minePOSPats(cPOS, Prob):
+    tagList = [
+        'NN', 'CC', 'LS', 'PDT', 'POS', 'SYM', 'NNS', 'NNP', 'NNPS', 'FW', 'CD',
+        'JJ', 'JJR', 'JJS', 'IN', 'TO', 'DT', 'EX', 'PRP', 'PRP$', 'WDT', 'WP',
+        'WP$', 'MD', 'VB', 'VBZ', 'VBP', 'VBD', 'VBN', 'VBG', 'RB', 'RBR', 'RBS',
+        'RP', 'WRB', 'UH', '.'
+    ]
     minSup = 0.3
     minAdherence = 0.2
     C = [{} for i in range(7)]
@@ -466,8 +481,10 @@ def minePOSPats(cPOS):
     n = len(Doc)
 
     for post in Doc:
+        with open(post, 'r') as f:
+            text = f.read()
         for tag in tagList:
-            if tag in post:
+            if tag in text:
                 if tag in C[0].keys():
                     C[0][tag] += 1
                 else:
@@ -482,8 +499,10 @@ def minePOSPats(cPOS):
     for k in range(1, 7):
         Cand[k] = candidateGen(F[k - 1])
         for post in Doc:
+            with open(post, 'r') as f:
+                text = f.read()
             for candidate in Cand[k]:
-                if candidate in post:
+                if candidate in text:
                     if candidate in C[k].keys():
                         C[k][candidate] += 1
                     else:
@@ -494,7 +513,7 @@ def minePOSPats(cPOS):
                 F[k].append(a)
 
         for a in F[k]:
-            if fairSCP(a) >= minAdherence:
+            if fairSCP(a, Prob) >= minAdherence:
                 SP[k].append(a)
 
     SPFinal = []
@@ -508,3 +527,151 @@ def getsingle(features, n):
     for item in features:
         single.append(item[n])
     return single
+
+
+def preforsen():
+    swnPos = {}
+    swnNeg = {}
+    count = {}
+
+    with open('SentiWordNet.txt', 'r') as f:
+        swnLines = f.readlines()
+    swnLines.pop()
+
+    i = 0
+    while i < len(swnLines):
+        swnLines[i] = swnLines[i].split('\t')
+        posScore = float(swnLines[i][2])
+        negScore = float(swnLines[i][3])
+        words = swnLines[i][4].split(' ')
+        for word in words:
+            j = word.find('#')
+            word = word[:j]
+
+            if word in count.keys():
+                count[word] += 1
+                swnPos[word] += posScore
+                swnNeg[word] += negScore
+            else:
+                count[word] = 1
+                swnPos[word] = posScore
+                swnNeg[word] = negScore
+
+        i += 1
+
+    for item in count:
+        swnPos[item] = swnPos[item] * 1.0 / count[item]
+        swnNeg[item] = swnNeg[item] * 1.0 / count[item]
+    return swnPos, swnNeg
+
+
+def sentimentFeature(text,swnPos, swnNeg):
+    posSentiSum = 0
+    negSentiSum = 0
+    tokens = nltk.word_tokenize(text)
+    noOfWords = len(text.split())
+    for word in tokens:
+        try:
+            posScore = swnPos[word]
+            negScore = swnNeg[word]
+        except KeyError:
+            posScore = 0.0
+            negScore = 0.0
+
+        posSentiSum += posScore
+        negSentiSum += negScore
+
+    posSenti = posSentiSum * 1.0 / noOfWords
+    negSenti = negSentiSum * 1.0 / noOfWords
+
+    return round(posSenti, 3), round(negSenti, 3)
+
+
+def yulewords(entry):
+    return filter(lambda w: len(w) > 0,
+                  [w.strip("0123456789!:,.?(){}[]") for w in entry.split()])
+
+
+def yule(entry):
+    d = {}
+    stemmer = PorterStemmer()
+    for w in yulewords(entry):
+        w = stemmer.stem(w).lower()
+        try:
+            d[w] += 1
+        except KeyError:
+            d[w] = 1
+
+    M1 = float(len(d))
+    M2 = sum(
+        [len(list(g)) * (freq**2) for freq, g in groupby(sorted(d.values()))])
+
+    try:
+        return (M1 * M1) / (M2 - M1)
+    except ZeroDivisionError:
+        return 0.0
+
+
+def baseFeatures(text, words, sentences,swnPos, swnNeg):
+    countSentences = len(sentences) - 3
+
+    if countSentences <= 0:
+        countSentences = 1
+
+    countWords = len(words)
+
+    if countWords is not 0:
+        countWordPerSentence = countWords * 1.0 / countSentences
+
+        countCharacters = len(text) - countSentences
+
+        countCharactersPerSentence = countCharacters * 1.0 / countSentences
+
+        countAlphabets = sum(c.isalpha() for c in text)
+        normalizedAlphabets = countAlphabets * 1.0 / countCharacters
+
+        countDigits = sum(c.isdigit() for c in text)
+        normalizedDigits = countDigits * 1.0 / countCharacters
+
+        countSpaces = sum(c.isspace() for c in text)
+        normalizedSpaces = countSpaces * 1.0 / countCharacters
+
+        countSpecialChars = countCharacters - countAlphabets - countDigits - countSpaces
+        normalizedSpecialChars = countSpecialChars * 1.0 / countCharacters
+
+        # we assumed short words are those words with length less than 4 characters
+        countShortWords = sum(1 for word in words if len(word) <= 4)
+        normalizedShortWords = countShortWords * 1.0 / countWords
+
+        countPunctuations = text.count('.') + text.count(',') + text.count(
+            '!') + text.count('?') + text.count(':') + text.count(';')
+        doubleQuotes = re.findall(r'\"(.+?)\"', text)
+        singleQuotes = re.findall(r'\'(.+?)\'', text)
+        countPunctuations += len(singleQuotes) + len(doubleQuotes)
+        normalizedPunctuations = countPunctuations * 1.0 / countCharacters
+
+        averageWordLength = sum(len(word) for word in words) / len(words)
+
+        countQuestionMark = text.count('?')
+        if countPunctuations <= 0:
+            countPunctuations = 1
+        normalizedQuestionPerPunctuations = countQuestionMark * 1.0 / countPunctuations
+        try:
+            lexicalRichness = yule(text)
+        except:
+            lexicalRichness = 0
+
+        sentimentPosScore, sentimentNegScore = sentimentFeature(text, swnPos, swnNeg
+            )
+
+        return (countSentences, countWords, countWordPerSentence,
+                countCharacters, countCharactersPerSentence,
+                normalizedAlphabets, normalizedDigits, normalizedSpaces,
+                normalizedSpecialChars, normalizedShortWords,
+                normalizedPunctuations, averageWordLength,
+                normalizedQuestionPerPunctuations, lexicalRichness,
+                sentimentPosScore, sentimentNegScore)
+
+    else:
+        return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0)
